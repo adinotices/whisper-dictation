@@ -41,6 +41,15 @@ class DictationDaemon:
             self.recorder.start(self.wav_path)
             self.notifier("🎙 Listening…", "")
             return "recording"
+        if command == "start":
+            if not self.recorder.is_recording:
+                self.recorder.start(self.wav_path)
+                self.notifier("🎙 Listening…", "")
+            return "recording"
+        if command == "stop":
+            if self.recorder.is_recording:
+                return self._stop_and_transcribe()
+            return "idle"
         return "unknown"
 
     def _stop_and_transcribe(self) -> str:

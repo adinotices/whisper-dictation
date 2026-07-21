@@ -1,0 +1,13 @@
+[Unit]
+Description=Push-to-talk listener for Whisper dictation
+After=dictate.service
+Requires=dictate.service
+
+[Service]
+Type=simple
+ExecStart=%h/repos/whisper-dictation/.venv/bin/dictate-ptt
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

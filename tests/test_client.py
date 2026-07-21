@@ -1,4 +1,4 @@
-from dictate.client import send_toggle
+from dictate.client import send_command, send_toggle
 
 
 class FakeConn:
@@ -21,3 +21,10 @@ def test_send_toggle_returns_reply():
     result = send_toggle(connect=lambda: conn)
     assert result == "recording"
     assert conn.sent == b"toggle"
+
+
+def test_send_command_sends_and_reads_reply():
+    conn = FakeConn(b"recording\n")
+    reply = send_command("start", connect=lambda: conn)
+    assert conn.sent == b"start"
+    assert reply == "recording"
