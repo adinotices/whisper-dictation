@@ -25,3 +25,10 @@ def test_ignores_unknown_keys(tmp_path):
     p.write_text('model = "small.en"\nnonsense = 42\n')
     cfg = load_config(p)
     assert cfg.model == "small.en"
+
+
+def test_ptt_key_defaults_and_loads(tmp_path):
+    assert Config().ptt_key == "rightctrl"
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text('ptt_key = "rightalt"\n')
+    assert load_config(cfg_file).ptt_key == "rightalt"

@@ -12,6 +12,7 @@ class Config:
     mic_source: str | None = None
     inject_method: str | None = None
     beep: bool = False
+    ptt_key: str = "rightctrl"
 
 
 def load_config(path: Path | None = None) -> Config:
