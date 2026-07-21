@@ -15,6 +15,7 @@ class Config:
     ptt_key: str = "rightctrl"
     smart_spacing: bool = True
     smart_spacing_reset_seconds: int = 30
+    voice_commands: bool = True
 
 
 def load_config(path: Path | None = None) -> Config:

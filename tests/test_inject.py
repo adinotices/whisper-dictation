@@ -2,13 +2,46 @@ import subprocess
 
 import pytest
 
-from dictate.inject import _command, inject
+from dictate.inject import _command, _key_command, inject, inject_key
 
 
 def test_command_shapes():
     assert _command("wtype", "hi") == ["wtype", "hi"]
     assert _command("ydotool", "hi") == ["ydotool", "type", "hi"]
     assert _command("clipboard", "hi") == ["wl-copy", "hi"]
+
+
+def test_key_command_shapes():
+    assert _key_command("wtype", "enter") == ["wtype", "-k", "Return"]
+    assert _key_command("wtype", "shift_enter") == [
+        "wtype", "-M", "shift", "-k", "Return", "-m", "shift",
+    ]
+    assert _key_command("ydotool", "enter") == ["ydotool", "key", "28:1", "28:0"]
+    assert _key_command("ydotool", "shift_enter") == [
+        "ydotool", "key", "42:1", "28:1", "28:0", "42:0",
+    ]
+
+
+def test_inject_key_falls_back_wtype_to_ydotool():
+    tried = []
+
+    def runner(cmd, **kwargs):
+        tried.append(cmd[0])
+        if cmd[0] == "wtype":
+            raise FileNotFoundError("no wtype")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    used = inject_key("enter", runner=runner)
+    assert used == "ydotool"
+    assert tried == ["wtype", "ydotool"]
+
+
+def test_inject_key_raises_when_no_key_method_works():
+    def runner(cmd, **kwargs):
+        raise FileNotFoundError("nope")
+
+    with pytest.raises(RuntimeError):
+        inject_key("enter", runner=runner)
 
 
 def test_falls_back_on_failure():
