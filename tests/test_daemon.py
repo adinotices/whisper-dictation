@@ -67,6 +67,30 @@ def test_status_and_quit():
     assert daemon.handle("quit") == "bye"
 
 
+def test_start_begins_recording_and_is_idempotent():
+    daemon, rec, events = make_daemon()
+    assert daemon.handle("start") == "recording"
+    assert rec.started == ["/tmp/cap.wav"]
+    # second start must not start a second recording
+    assert daemon.handle("start") == "recording"
+    assert rec.started == ["/tmp/cap.wav"]
+
+
+def test_stop_transcribes_and_injects():
+    daemon, rec, events = make_daemon()
+    daemon.handle("start")
+    assert daemon.handle("stop") == "idle"
+    assert rec.stopped == 1
+    assert events["injected"] == ["hello world"]
+
+
+def test_stop_when_idle_is_noop():
+    daemon, rec, events = make_daemon()
+    assert daemon.handle("stop") == "idle"
+    assert rec.stopped == 0
+    assert events["injected"] == []
+
+
 def test_injection_failure_notifies_with_transcript_and_does_not_raise():
     events = {"injected": [], "notes": []}
     rec = FakeRecorder()
