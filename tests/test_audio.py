@@ -1,4 +1,5 @@
 import signal
+import subprocess
 
 from dictate.audio import Recorder, build_pw_record_cmd
 
@@ -46,3 +47,25 @@ def test_recorder_lifecycle():
     assert rec.is_recording is False
     assert procs[0][1].signals == [signal.SIGINT]
     assert procs[0][1].waited is True
+
+
+class TimeoutProc:
+    def __init__(self):
+        self.signals = []
+
+    def send_signal(self, sig):
+        self.signals.append(sig)
+
+    def wait(self, timeout=None):
+        raise subprocess.TimeoutExpired("pw-record", 5)
+
+
+def test_recorder_stop_resets_state_on_wait_timeout():
+    rec = Recorder(spawn=lambda cmd: TimeoutProc())
+    rec.start("/tmp/a.wav")
+    assert rec.is_recording is True
+    try:
+        rec.stop()
+    except subprocess.TimeoutExpired:
+        pass
+    assert rec.is_recording is False

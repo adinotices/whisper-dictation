@@ -57,3 +57,30 @@ def test_status_and_quit():
     daemon, rec, events = make_daemon()
     assert daemon.handle("status") == "idle"
     assert daemon.handle("quit") == "bye"
+
+
+def test_injection_failure_notifies_with_transcript_and_does_not_raise():
+    events = {"injected": [], "notes": []}
+    rec = FakeRecorder()
+
+    def failing_injector(text, method):
+        raise RuntimeError("all injection methods failed")
+
+    daemon = DictationDaemon(
+        config=Config(),
+        model=object(),
+        recorder=rec,
+        transcriber=lambda wav, model, language: "hello world",
+        injector=failing_injector,
+        notifier=lambda summary, body="": events["notes"].append((summary, body)),
+        wav_path="/tmp/cap.wav",
+    )
+    assert daemon.handle("toggle") == "recording"
+    result = daemon.handle("toggle")
+    assert result == "idle"
+    assert rec.stopped == 1
+    assert events["injected"] == []
+    assert any(
+        "could not insert" in summary and "hello world" in body
+        for summary, body in events["notes"]
+    )

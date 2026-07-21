@@ -47,7 +47,11 @@ class DictationDaemon:
         if not text:
             self.notifier("No speech detected", "")
             return "idle"
-        method = self.injector(text, self.config.inject_method)
+        try:
+            method = self.injector(text, self.config.inject_method)
+        except RuntimeError:
+            self.notifier("Dictation: could not insert text", text)
+            return "idle"
         self.notifier("✍️ Inserted", f"({method}) {text[:60]}")
         return "idle"
 
@@ -75,8 +79,12 @@ def main() -> None:
             conn, _ = server.accept()
             with conn:
                 data = conn.recv(1024).decode().strip()
-                reply = daemon.handle(data)
-                conn.sendall((reply + "\n").encode())
+                try:
+                    reply = daemon.handle(data)
+                    conn.sendall((reply + "\n").encode())
+                except Exception as exc:  # noqa: BLE001 - keep daemon alive
+                    notify("dictate error", str(exc))
+                    continue
                 if reply == "bye":
                     break
     finally:

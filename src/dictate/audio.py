@@ -29,5 +29,7 @@ class Recorder:
         if self._proc is None:
             return
         self._proc.send_signal(signal.SIGINT)
-        self._proc.wait(timeout=5)
-        self._proc = None
+        try:
+            self._proc.wait(timeout=5)
+        finally:
+            self._proc = None
