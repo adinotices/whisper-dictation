@@ -24,6 +24,8 @@ def detect_method() -> str:
 
 def inject(text: str, method: str | None = None, runner=subprocess.run) -> str:
     start = method or detect_method()
+    if start not in METHODS:
+        raise RuntimeError(f"unknown injection method: {start}")
     order = METHODS[METHODS.index(start):]
     last_error: Exception | None = None
     for m in order:

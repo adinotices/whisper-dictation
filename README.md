@@ -60,6 +60,19 @@ systemctl --user status dictate.service --no-pager
 
 You should see a "dictate ready" desktop notification once the model has loaded.
 
+If the "dictate ready" notification never appears, or injection does nothing
+when the daemon is launched by systemd, the unit likely started before
+`WAYLAND_DISPLAY` / `DBUS_SESSION_BUS_ADDRESS` were available to the user
+session. Fix with:
+
+```bash
+systemctl --user import-environment WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS
+systemctl --user restart dictate.service
+```
+
+COSMIC usually imports these automatically, so this is only needed as a
+fallback.
+
 ### 4. Confirm the text-injection method
 
 ```bash
@@ -117,7 +130,7 @@ model = "small.en"        # or "medium.en" for higher accuracy, a bit slower
 language = "en"
 mic_source = ""           # PipeWire node name; empty = default source
 inject_method = ""        # "wtype" | "ydotool" | "clipboard"; empty = auto-detect
-beep = false
+beep = false           # reserved — not yet implemented
 ```
 
 To find your microphone's node name for `mic_source`, run `wpctl status` and use

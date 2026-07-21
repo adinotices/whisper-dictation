@@ -31,3 +31,11 @@ def test_raises_when_all_fail():
 
     with pytest.raises(RuntimeError):
         inject("hello", method="wtype", runner=runner)
+
+
+def test_unknown_method_raises_runtime_error_without_running():
+    def runner(cmd, **kwargs):
+        raise AssertionError("runner should never be called for an unknown method")
+
+    with pytest.raises(RuntimeError):
+        inject("hi", method="bogus", runner=runner)

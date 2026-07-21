@@ -1,5 +1,6 @@
 import os
 import socket
+import sys
 from pathlib import Path
 
 from .audio import Recorder
@@ -49,7 +50,8 @@ class DictationDaemon:
             return "idle"
         try:
             method = self.injector(text, self.config.inject_method)
-        except RuntimeError:
+        except RuntimeError as exc:
+            print(f"dictate: injection failed: {exc}", file=sys.stderr)
             self.notifier("Dictation: could not insert text", text)
             return "idle"
         self.notifier("✍️ Inserted", f"({method}) {text[:60]}")
@@ -65,6 +67,7 @@ def process_request(daemon, data, notifier):
     try:
         reply = daemon.handle(data)
     except Exception as exc:  # noqa: BLE001 - keep serving on any handler error
+        print(f"dictate: request handling failed: {exc}", file=sys.stderr)
         notifier("dictate error", str(exc))
         return None, False
     return reply, reply == "bye"
