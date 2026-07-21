@@ -32,3 +32,13 @@ def test_ptt_key_defaults_and_loads(tmp_path):
     cfg_file = tmp_path / "config.toml"
     cfg_file.write_text('ptt_key = "rightalt"\n')
     assert load_config(cfg_file).ptt_key == "rightalt"
+
+
+def test_smart_spacing_defaults_and_loads(tmp_path):
+    assert Config().smart_spacing is True
+    assert Config().smart_spacing_reset_seconds == 30
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("smart_spacing = false\nsmart_spacing_reset_seconds = 5\n")
+    cfg = load_config(cfg_file)
+    assert cfg.smart_spacing is False
+    assert cfg.smart_spacing_reset_seconds == 5

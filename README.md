@@ -165,7 +165,16 @@ mic_source = ""           # PipeWire node name; empty = default source
 inject_method = ""        # "wtype" | "ydotool" | "clipboard"; empty = auto-detect
 beep = false              # reserved — not yet implemented
 ptt_key = "rightctrl"     # push-to-talk key (evdev name, KEY_ prefix dropped)
+smart_spacing = true      # auto-space/capitalize between consecutive dictations
+smart_spacing_reset_seconds = 30  # after this idle gap, next dictation starts fresh
 ```
+
+**Smart spacing:** consecutive dictations are separated by a space, and a new
+dictation is capitalized when the previous one ended a sentence (`.`, `!`, `?`) —
+so `"a sentence."` then `"and more"` becomes `a sentence. And more` instead of
+`a sentence.and more`. The daemon tracks only its own output; after
+`smart_spacing_reset_seconds` of inactivity it forgets the previous chunk and the
+next dictation starts fresh (no leading space or forced capital).
 
 To find your microphone's node name for `mic_source`, run `wpctl status` and use
 the source's name (e.g. the Anker PowerConf C200).

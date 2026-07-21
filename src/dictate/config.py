@@ -13,6 +13,8 @@ class Config:
     inject_method: str | None = None
     beep: bool = False
     ptt_key: str = "rightctrl"
+    smart_spacing: bool = True
+    smart_spacing_reset_seconds: int = 30
 
 
 def load_config(path: Path | None = None) -> Config:
