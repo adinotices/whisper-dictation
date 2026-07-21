@@ -44,6 +44,91 @@ def make_daemon(transcript="hello world"):
     return daemon, rec, events
 
 
+def make_seq_daemon(transcripts, config=None, clock=None, injector=None):
+    """Daemon whose transcriber returns each item of `transcripts` in turn."""
+    events = {"injected": [], "notes": []}
+    rec = FakeRecorder()
+    seq = iter(transcripts)
+    if injector is None:
+        def injector(text, method):
+            events["injected"].append(text)
+            return "wtype"
+    daemon = DictationDaemon(
+        config=config or Config(),
+        model=object(),
+        recorder=rec,
+        transcriber=lambda wav, model, language: next(seq),
+        injector=injector,
+        notifier=lambda summary, body="": events["notes"].append(summary),
+        wav_path="/tmp/cap.wav",
+        clock=clock or (lambda: 0.0),
+    )
+    return daemon, rec, events
+
+
+def _dictate_once(daemon):
+    daemon.handle("toggle")  # start
+    daemon.handle("toggle")  # stop + transcribe + inject
+
+
+def test_smart_spacing_adds_space_between_sequential_dictations():
+    daemon, rec, events = make_seq_daemon(["hello world", "next chunk"])
+    _dictate_once(daemon)
+    _dictate_once(daemon)
+    assert events["injected"] == ["hello world", " next chunk"]
+
+
+def test_smart_spacing_capitalizes_after_sentence():
+    daemon, rec, events = make_seq_daemon(["first sentence.", "next one"])
+    _dictate_once(daemon)
+    _dictate_once(daemon)
+    assert events["injected"] == ["first sentence.", " Next one"]
+
+
+def test_smart_spacing_resets_after_idle_window():
+    now = [1000.0]
+    daemon, rec, events = make_seq_daemon(["first.", "second"], clock=lambda: now[0])
+    _dictate_once(daemon)
+    now[0] += 31  # exceed the 30s reset window
+    _dictate_once(daemon)
+    # fresh start: no leading space, no forced capital
+    assert events["injected"] == ["first.", "second"]
+
+
+def test_smart_spacing_disabled_injects_raw():
+    daemon, rec, events = make_seq_daemon(
+        ["hello", "world"], config=Config(smart_spacing=False)
+    )
+    _dictate_once(daemon)
+    _dictate_once(daemon)
+    assert events["injected"] == ["hello", "world"]
+
+
+def test_empty_transcript_does_not_update_boundary_state():
+    daemon, rec, events = make_seq_daemon(["hello", "", "world"])
+    _dictate_once(daemon)  # "hello"
+    _dictate_once(daemon)  # empty -> no injection, state unchanged
+    _dictate_once(daemon)  # "world" spaced off "hello"
+    assert events["injected"] == ["hello", " world"]
+
+
+def test_injection_failure_does_not_update_boundary_state():
+    calls = [0]
+    events = {"injected": []}
+
+    def injector(text, method):
+        calls[0] += 1
+        if calls[0] == 1:
+            raise RuntimeError("boom")
+        events["injected"].append(text)
+        return "wtype"
+
+    daemon, rec, _ = make_seq_daemon(["first.", "second"], injector=injector)
+    _dictate_once(daemon)  # injection fails, state stays empty
+    _dictate_once(daemon)  # fresh start -> no leading space
+    assert events["injected"] == ["second"]
+
+
 def test_toggle_starts_and_stops_recording():
     daemon, rec, events = make_daemon()
     assert daemon.handle("toggle") == "recording"

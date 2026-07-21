@@ -2,12 +2,14 @@ import os
 import signal
 import socket
 import sys
+import time
 from pathlib import Path
 
 from .audio import Recorder
 from .config import load_config
 from .inject import inject
 from .notify import notify
+from .textproc import format_segment
 from .transcribe import load_model, transcribe_wav
 
 
@@ -20,7 +22,7 @@ def socket_path() -> Path:
 
 class DictationDaemon:
     def __init__(self, config, model, recorder, transcriber, injector,
-                 notifier, wav_path):
+                 notifier, wav_path, clock=time.monotonic):
         self.config = config
         self.model = model
         self.recorder = recorder
@@ -28,6 +30,9 @@ class DictationDaemon:
         self.injector = injector
         self.notifier = notifier
         self.wav_path = wav_path
+        self._clock = clock
+        self._last_text = ""
+        self._last_time = 0.0
 
     def handle(self, command: str) -> str:
         command = command.strip()
@@ -63,14 +68,28 @@ class DictationDaemon:
         if not text:
             self.notifier("No speech detected", "")
             return "idle"
+        to_inject = self._apply_spacing(text)
         try:
-            method = self.injector(text, self.config.inject_method)
+            method = self.injector(to_inject, self.config.inject_method)
         except RuntimeError as exc:
             print(f"dictate: injection failed: {exc}", file=sys.stderr)
             self.notifier("Dictation: could not insert text", text)
             return "idle"
-        self.notifier("✍️ Inserted", f"({method}) {text[:60]}")
+        # Remember what we actually typed (and when) so the next dictation can
+        # space/capitalize off it — only after a successful injection.
+        self._last_text = to_inject
+        self._last_time = self._clock()
+        self.notifier("✍️ Inserted", f"({method}) {to_inject[:60]}")
         return "idle"
+
+    def _apply_spacing(self, text: str) -> str:
+        if not self.config.smart_spacing:
+            return text
+        prev = self._last_text
+        if prev and (self._clock() - self._last_time) > \
+                self.config.smart_spacing_reset_seconds:
+            prev = ""  # idle too long: treat this dictation as a fresh start
+        return format_segment(text, prev)
 
 
 def read_request(conn, timeout=5):
