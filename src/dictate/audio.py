@@ -28,8 +28,14 @@ class Recorder:
     def stop(self) -> None:
         if self._proc is None:
             return
-        self._proc.send_signal(signal.SIGINT)
         try:
-            self._proc.wait(timeout=5)
+            self._proc.send_signal(signal.SIGINT)
+            try:
+                self._proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # pw-record ignored SIGINT; force it down so it can't orphan,
+                # then let the caller transcribe whatever WAV was flushed.
+                self._proc.kill()
+                self._proc.wait()
         finally:
             self._proc = None

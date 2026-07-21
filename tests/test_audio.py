@@ -52,20 +52,30 @@ def test_recorder_lifecycle():
 class TimeoutProc:
     def __init__(self):
         self.signals = []
+        self.killed = False
+        self.waits = []
 
     def send_signal(self, sig):
         self.signals.append(sig)
 
+    def kill(self):
+        self.killed = True
+
     def wait(self, timeout=None):
-        raise subprocess.TimeoutExpired("pw-record", 5)
+        self.waits.append(timeout)
+        if timeout is not None:
+            # the SIGINT grace-period wait times out
+            raise subprocess.TimeoutExpired("pw-record", timeout)
+        # the post-kill reap succeeds
+        return 0
 
 
-def test_recorder_stop_resets_state_on_wait_timeout():
-    rec = Recorder(spawn=lambda cmd: TimeoutProc())
+def test_recorder_stop_kills_and_recovers_on_wait_timeout():
+    proc = TimeoutProc()
+    rec = Recorder(spawn=lambda cmd: proc)
     rec.start("/tmp/a.wav")
     assert rec.is_recording is True
-    try:
-        rec.stop()
-    except subprocess.TimeoutExpired:
-        pass
+    rec.stop()  # escalates SIGINT -> SIGKILL; must not raise
+    assert proc.signals == [signal.SIGINT]
+    assert proc.killed is True
     assert rec.is_recording is False
