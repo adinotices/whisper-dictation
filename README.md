@@ -154,6 +154,27 @@ name minus the `KEY_` prefix, lower-case — e.g. `ptt_key = "rightalt"`), then
 **Note:** a keyboard plugged in *after* the listener starts is picked up only on
 `systemctl --user restart dictate-ptt.service`.
 
+## Inline voice commands
+
+You can insert line breaks and submit a field **by voice, inline, in a single
+utterance** — no separate command mode:
+
+| Say…                     | Does                                             |
+|--------------------------|--------------------------------------------------|
+| "new line"               | inserts a line break (Shift+Enter)               |
+| "new paragraph"          | inserts two line breaks                          |
+| "enter" / "press enter"  | presses Enter to submit — **only at the very end** of what you say |
+
+So "*write this down new line and this too press enter*" types two lines and then
+submits. "new line" / "new paragraph" emit **Shift+Enter**, which is a literal line
+break in both text editors and chat apps (Claude, Slack) — it never accidentally
+sends. A true Enter is only triggered when "enter" is the last thing you say, so
+there is never speech left to lose after a submit. Because the whole utterance is
+transcribed before anything is typed, nothing you said is ever dropped.
+
+Disable with `voice_commands = false` if you dictate prose that literally contains
+these phrases.
+
 ## Configuration
 
 Optional, at `~/.config/dictate/config.toml`. Every key has a default:
@@ -167,6 +188,7 @@ beep = false              # reserved — not yet implemented
 ptt_key = "rightctrl"     # push-to-talk key (evdev name, KEY_ prefix dropped)
 smart_spacing = true      # auto-space/capitalize between consecutive dictations
 smart_spacing_reset_seconds = 30  # after this idle gap, next dictation starts fresh
+voice_commands = true     # inline "new line" / "new paragraph" / trailing "enter"
 ```
 
 **Smart spacing:** consecutive dictations are separated by a space, and a new

@@ -30,7 +30,7 @@ class FakeRecorder:
 
 
 def make_daemon(transcript="hello world"):
-    events = {"injected": [], "notes": []}
+    events = {"injected": [], "keys": [], "notes": []}
     rec = FakeRecorder()
     daemon = DictationDaemon(
         config=Config(),
@@ -38,6 +38,7 @@ def make_daemon(transcript="hello world"):
         recorder=rec,
         transcriber=lambda wav, model, language: transcript,
         injector=lambda text, method: events["injected"].append(text) or "wtype",
+        key_injector=lambda key, method: events["keys"].append(key) or "wtype",
         notifier=lambda summary, body="": events["notes"].append(summary),
         wav_path="/tmp/cap.wav",
     )
@@ -46,7 +47,7 @@ def make_daemon(transcript="hello world"):
 
 def make_seq_daemon(transcripts, config=None, clock=None, injector=None):
     """Daemon whose transcriber returns each item of `transcripts` in turn."""
-    events = {"injected": [], "notes": []}
+    events = {"injected": [], "keys": [], "notes": []}
     rec = FakeRecorder()
     seq = iter(transcripts)
     if injector is None:
@@ -59,6 +60,7 @@ def make_seq_daemon(transcripts, config=None, clock=None, injector=None):
         recorder=rec,
         transcriber=lambda wav, model, language: next(seq),
         injector=injector,
+        key_injector=lambda key, method: events["keys"].append(key) or "wtype",
         notifier=lambda summary, body="": events["notes"].append(summary),
         wav_path="/tmp/cap.wav",
         clock=clock or (lambda: 0.0),
@@ -127,6 +129,85 @@ def test_injection_failure_does_not_update_boundary_state():
     _dictate_once(daemon)  # injection fails, state stays empty
     _dictate_once(daemon)  # fresh start -> no leading space
     assert events["injected"] == ["second"]
+
+
+def test_voice_command_injects_text_and_keys_in_order():
+    order = []
+    events = {"notes": []}
+    rec = FakeRecorder()
+    daemon = DictationDaemon(
+        config=Config(),
+        model=object(),
+        recorder=rec,
+        transcriber=lambda wav, model, language: "line one new line line two",
+        injector=lambda text, method: order.append(("text", text)) or "wtype",
+        key_injector=lambda key, method: order.append(("key", key)) or "wtype",
+        notifier=lambda summary, body="": events["notes"].append(summary),
+        wav_path="/tmp/cap.wav",
+    )
+    _dictate_once(daemon)
+    assert order == [
+        ("text", "line one"),
+        ("key", "shift_enter"),
+        ("text", "line two"),
+    ]
+
+
+def test_voice_command_trailing_enter_submits():
+    daemon, rec, events = make_seq_daemon(["send this press enter"])
+    _dictate_once(daemon)
+    assert events["injected"] == ["send this"]
+    assert events["keys"] == ["enter"]
+
+
+def test_smart_spacing_applies_only_to_first_text_chunk():
+    daemon, rec, events = make_seq_daemon(["a.", "b new line c"])
+    _dictate_once(daemon)          # "a."
+    _dictate_once(daemon)          # boundary + voice command
+    # first chunk of 2nd utterance gets space+capital off "a."; chunk after the
+    # newline injects verbatim (no forced leading space).
+    assert events["injected"] == ["a.", " B", "c"]
+    assert events["keys"] == ["shift_enter"]
+
+
+def test_boundary_state_resets_after_trailing_key():
+    daemon, rec, events = make_seq_daemon(["done. enter", "fresh"])
+    _dictate_once(daemon)          # "done." + Enter -> submit, state reset
+    _dictate_once(daemon)          # should start fresh: no leading space
+    assert events["injected"] == ["done.", "fresh"]
+    assert events["keys"] == ["enter"]
+
+
+def test_voice_commands_disabled_injects_transcript_verbatim():
+    daemon, rec, events = make_seq_daemon(
+        ["say new line literally"], config=Config(voice_commands=False)
+    )
+    _dictate_once(daemon)
+    assert events["injected"] == ["say new line literally"]
+    assert events["keys"] == []
+
+
+def test_key_injection_failure_aborts_and_keeps_state():
+    events = {"injected": [], "notes": []}
+    rec = FakeRecorder()
+
+    def key_injector(key, method):
+        raise RuntimeError("no key backend")
+
+    daemon = DictationDaemon(
+        config=Config(),
+        model=object(),
+        recorder=rec,
+        transcriber=lambda wav, model, language: "hello new line world",
+        injector=lambda text, method: events["injected"].append(text) or "wtype",
+        key_injector=key_injector,
+        notifier=lambda summary, body="": events["notes"].append((summary, body)),
+        wav_path="/tmp/cap.wav",
+    )
+    _dictate_once(daemon)
+    # first text chunk injected, then key fails -> abort, state left empty
+    assert events["injected"] == ["hello"]
+    assert daemon._last_text == ""
 
 
 def test_toggle_starts_and_stops_recording():

@@ -6,8 +6,9 @@ import time
 from pathlib import Path
 
 from .audio import Recorder
+from .commands import parse_utterance
 from .config import load_config
-from .inject import inject
+from .inject import inject, inject_key
 from .notify import notify
 from .textproc import format_segment
 from .transcribe import load_model, transcribe_wav
@@ -22,12 +23,14 @@ def socket_path() -> Path:
 
 class DictationDaemon:
     def __init__(self, config, model, recorder, transcriber, injector,
-                 notifier, wav_path, clock=time.monotonic):
+                 notifier, wav_path, key_injector=inject_key,
+                 clock=time.monotonic):
         self.config = config
         self.model = model
         self.recorder = recorder
         self.transcriber = transcriber
         self.injector = injector
+        self.key_injector = key_injector
         self.notifier = notifier
         self.wav_path = wav_path
         self._clock = clock
@@ -68,19 +71,40 @@ class DictationDaemon:
         if not text:
             self.notifier("No speech detected", "")
             return "idle"
-        to_inject = self._apply_spacing(text)
+
+        actions = self._plan_actions(text)
+        last_kind = None
+        last_text = ""
+        first_text_done = False
         try:
-            method = self.injector(to_inject, self.config.inject_method)
+            for kind, value in actions:
+                if kind == "text":
+                    to_inject = value
+                    if not first_text_done:
+                        to_inject = self._apply_spacing(value)
+                        first_text_done = True
+                    self.injector(to_inject, self.config.inject_method)
+                    last_text = to_inject
+                else:  # key
+                    self.key_injector(value, self.config.inject_method)
+                last_kind = kind
         except RuntimeError as exc:
             print(f"dictate: injection failed: {exc}", file=sys.stderr)
             self.notifier("Dictation: could not insert text", text)
             return "idle"
-        # Remember what we actually typed (and when) so the next dictation can
-        # space/capitalize off it — only after a successful injection.
-        self._last_text = to_inject
+
+        # Remember what we typed (and when) so the next dictation can
+        # space/capitalize off it. A trailing key (Enter/Shift+Enter) means the
+        # next dictation lands on a new line or a fresh field, so reset the state.
+        self._last_text = last_text if last_kind == "text" else ""
         self._last_time = self._clock()
-        self.notifier("✍️ Inserted", f"({method}) {to_inject[:60]}")
+        self.notifier("✍️ Inserted", text[:60])
         return "idle"
+
+    def _plan_actions(self, text):
+        if not self.config.voice_commands:
+            return [("text", text)]
+        return parse_utterance(text)
 
     def _apply_spacing(self, text: str) -> str:
         if not self.config.smart_spacing:

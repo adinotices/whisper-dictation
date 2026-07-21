@@ -42,3 +42,10 @@ def test_smart_spacing_defaults_and_loads(tmp_path):
     cfg = load_config(cfg_file)
     assert cfg.smart_spacing is False
     assert cfg.smart_spacing_reset_seconds == 5
+
+
+def test_voice_commands_defaults_and_loads(tmp_path):
+    assert Config().voice_commands is True
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("voice_commands = false\n")
+    assert load_config(cfg_file).voice_commands is False
