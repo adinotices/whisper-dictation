@@ -5,6 +5,7 @@ description = "Local Whisper toggle-dictation for COSMIC/Wayland"
 requires-python = ">=3.11"
 dependencies = [
     "faster-whisper>=1.0.0",
+    "evdev>=1.6.0",
 ]
 
 [project.optional-dependencies]
@@ -13,6 +14,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 dictate-daemon = "dictate.daemon:main"
 dictate-toggle = "dictate.client:main"
+dictate-ptt = "dictate.ptt:main"
 
 [build-system]
 requires = ["setuptools>=68"]

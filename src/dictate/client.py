@@ -12,13 +12,17 @@ def socket_connect():
     return sock
 
 
-def send_toggle(connect=socket_connect) -> str:
+def send_command(command, connect=socket_connect) -> str:
     conn = connect()
     try:
-        conn.sendall(b"toggle")
+        conn.sendall(command.encode())
         return conn.recv(1024).decode().strip()
     finally:
         conn.close()
+
+
+def send_toggle(connect=socket_connect) -> str:
+    return send_command("toggle", connect=connect)
 
 
 def _start_daemon_and_wait() -> None:
