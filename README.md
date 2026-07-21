@@ -103,10 +103,11 @@ membership takes effect.
 COSMIC stores custom shortcuts in its own settings, so this step is manual:
 
 **Settings → Keyboard → Keyboard Shortcuts → Custom Shortcuts → Add**, with the
-command:
+command (use the full absolute path — expand `$HOME` to your home directory,
+e.g. `/home/you/...`, since the shortcut field does not expand `~` or `$HOME`):
 
 ```
-/home/admin/repos/whisper-dictation/.venv/bin/dictate-toggle
+$HOME/repos/whisper-dictation/.venv/bin/dictate-toggle
 ```
 
 Assigned key: **Super+D** _(update this line if you choose a different key)._
