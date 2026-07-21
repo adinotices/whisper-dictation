@@ -122,6 +122,38 @@ If no speech is detected you get a "No speech detected" notification and nothing
 is inserted. If every injection method fails, the transcript is shown in a
 notification so you can copy it manually.
 
+## Push-to-talk (hold to dictate)
+
+In addition to the Super+D tap-toggle, you can **hold a key to talk and release to
+transcribe**. Because Wayland desktop shortcuts fire only on key *press* (never on
+release), this needs a small listener (`dictate-ptt`) that reads keyboard events
+from `/dev/input` and drives the daemon's `start`/`stop` commands. It does **not**
+grab the key, so Right Ctrl still works as a normal modifier.
+
+**One-time setup:**
+
+```bash
+# 1. Grant your user read access to input devices, then LOG OUT and back in.
+sudo usermod -aG input "$USER"
+
+# 2. Install both user services and enable them.
+mkdir -p ~/.config/systemd/user
+cp ~/repos/whisper-dictation/systemd/dictate.service \
+   ~/repos/whisper-dictation/systemd/dictate-ptt.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now dictate.service dictate-ptt.service
+```
+
+Hold **Right Ctrl** to record, release to transcribe into the focused field. The
+Super+D tap-toggle keeps working alongside it.
+
+**Change the key:** set `ptt_key` in `~/.config/dictate/config.toml` (any evdev key
+name minus the `KEY_` prefix, lower-case — e.g. `ptt_key = "rightalt"`), then
+`systemctl --user restart dictate-ptt.service`.
+
+**Note:** a keyboard plugged in *after* the listener starts is picked up only on
+`systemctl --user restart dictate-ptt.service`.
+
 ## Configuration
 
 Optional, at `~/.config/dictate/config.toml`. Every key has a default:
@@ -131,7 +163,8 @@ model = "small.en"        # or "medium.en" for higher accuracy, a bit slower
 language = "en"
 mic_source = ""           # PipeWire node name; empty = default source
 inject_method = ""        # "wtype" | "ydotool" | "clipboard"; empty = auto-detect
-beep = false           # reserved — not yet implemented
+beep = false              # reserved — not yet implemented
+ptt_key = "rightctrl"     # push-to-talk key (evdev name, KEY_ prefix dropped)
 ```
 
 To find your microphone's node name for `mic_source`, run `wpctl status` and use
