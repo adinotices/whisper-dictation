@@ -1,0 +1,22 @@
+[project]
+name = "dictate"
+version = "0.1.0"
+description = "Local Whisper toggle-dictation for COSMIC/Wayland"
+requires-python = ">=3.11"
+dependencies = [
+    "faster-whisper>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+dictate-daemon = "dictate.daemon:main"
+dictate-toggle = "dictate.client:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

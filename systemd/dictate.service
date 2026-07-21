@@ -1,0 +1,13 @@
+[Unit]
+Description=Local Whisper dictation daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/repos/whisper-dictation/.venv/bin/dictate-daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
