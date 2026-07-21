@@ -44,7 +44,12 @@ class DictationDaemon:
 
     def _stop_and_transcribe(self) -> str:
         self.recorder.stop()
-        text = self.transcriber(self.wav_path, self.model, self.config.language)
+        try:
+            text = self.transcriber(self.wav_path, self.model, self.config.language)
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully, don't crash
+            print(f"dictate: transcription failed: {exc}", file=sys.stderr)
+            self.notifier("Dictation: transcription failed", str(exc))
+            return "idle"
         if not text:
             self.notifier("No speech detected", "")
             return "idle"
@@ -56,6 +61,18 @@ class DictationDaemon:
             return "idle"
         self.notifier("✍️ Inserted", f"({method}) {text[:60]}")
         return "idle"
+
+
+def read_request(conn, timeout=5):
+    """Read one command from conn. Returns the stripped string, or None if the
+    client sends nothing within `timeout` seconds, so a single silent client
+    can't hang the single-threaded serve loop.
+    """
+    conn.settimeout(timeout)
+    try:
+        return conn.recv(1024).decode().strip()
+    except (socket.timeout, TimeoutError):
+        return None
 
 
 def process_request(daemon, data, notifier):
@@ -95,7 +112,9 @@ def main() -> None:
         while True:
             conn, _ = server.accept()
             with conn:
-                data = conn.recv(1024).decode().strip()
+                data = read_request(conn)
+                if data is None:
+                    continue
                 reply, should_break = process_request(daemon, data, notify)
                 if reply is not None:
                     conn.sendall((reply + "\n").encode())
