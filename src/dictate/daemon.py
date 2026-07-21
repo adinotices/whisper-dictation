@@ -56,6 +56,20 @@ class DictationDaemon:
         return "idle"
 
 
+def process_request(daemon, data, notifier):
+    """Handle one request. Returns (reply, should_break).
+
+    Contains errors from daemon.handle: on failure, notify and return
+    (None, False) so the serve loop keeps running and sends no reply.
+    """
+    try:
+        reply = daemon.handle(data)
+    except Exception as exc:  # noqa: BLE001 - keep serving on any handler error
+        notifier("dictate error", str(exc))
+        return None, False
+    return reply, reply == "bye"
+
+
 def main() -> None:
     config = load_config()
     model = load_model(config.model)
@@ -79,13 +93,10 @@ def main() -> None:
             conn, _ = server.accept()
             with conn:
                 data = conn.recv(1024).decode().strip()
-                try:
-                    reply = daemon.handle(data)
+                reply, should_break = process_request(daemon, data, notify)
+                if reply is not None:
                     conn.sendall((reply + "\n").encode())
-                except Exception as exc:  # noqa: BLE001 - keep daemon alive
-                    notify("dictate error", str(exc))
-                    continue
-                if reply == "bye":
+                if should_break:
                     break
     finally:
         server.close()

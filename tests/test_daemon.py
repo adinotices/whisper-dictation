@@ -1,5 +1,5 @@
 from dictate.config import Config
-from dictate.daemon import DictationDaemon
+from dictate.daemon import DictationDaemon, process_request
 
 
 class FakeRecorder:
@@ -84,3 +84,40 @@ def test_injection_failure_notifies_with_transcript_and_does_not_raise():
         "could not insert" in summary and "hello world" in body
         for summary, body in events["notes"]
     )
+
+
+class _StubDaemon:
+    def __init__(self, result=None, error=None):
+        self._result = result
+        self._error = error
+
+    def handle(self, data):
+        if self._error is not None:
+            raise self._error
+        return self._result
+
+
+def test_process_request_contains_handler_error():
+    notes = []
+    daemon = _StubDaemon(error=RuntimeError("boom"))
+
+    reply, should_break = process_request(daemon, "toggle", lambda s, b="": notes.append((s, b)))
+
+    assert (reply, should_break) == (None, False)
+    assert any("boom" in summary or "boom" in body for summary, body in notes)
+
+
+def test_process_request_returns_bye_and_breaks():
+    daemon = _StubDaemon(result="bye")
+
+    reply, should_break = process_request(daemon, "quit", lambda s, b="": None)
+
+    assert (reply, should_break) == ("bye", True)
+
+
+def test_process_request_returns_recording_and_does_not_break():
+    daemon = _StubDaemon(result="recording")
+
+    reply, should_break = process_request(daemon, "toggle", lambda s, b="": None)
+
+    assert (reply, should_break) == ("recording", False)
