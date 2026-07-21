@@ -1,7 +1,13 @@
 import socket
 
 from dictate.config import Config
-from dictate.daemon import DictationDaemon, process_request, read_request
+from dictate.daemon import (
+    DictationDaemon,
+    create_server,
+    process_request,
+    read_request,
+    send_reply,
+)
 
 
 class FakeRecorder:
@@ -113,6 +119,43 @@ def test_transcription_failure_notifies_and_does_not_raise():
         "transcription failed" in summary.lower()
         for summary, body in events["notes"]
     )
+
+
+def test_send_reply_writes_line():
+    class RecordingConn:
+        def __init__(self):
+            self.sent = b""
+
+        def sendall(self, data):
+            self.sent += data
+
+    conn = RecordingConn()
+    send_reply(conn, "idle")
+    assert conn.sent == b"idle\n"
+
+
+def test_send_reply_tolerates_disconnected_client():
+    class BrokenConn:
+        def sendall(self, data):
+            raise BrokenPipeError("client gone")
+
+    send_reply(BrokenConn(), "idle")  # must not raise
+
+
+def test_create_server_replaces_stale_socket_and_accepts(tmp_path):
+    p = tmp_path / "dictate.sock"
+    p.write_text("stale")  # leftover file from a daemon killed without cleanup
+    server = create_server(p)
+    try:
+        assert p.is_socket()
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(2)
+        client.connect(str(p))  # succeeds: already bound + listening
+        client.close()
+    finally:
+        server.close()
+        if p.exists():
+            p.unlink()
 
 
 class FakeConn:
