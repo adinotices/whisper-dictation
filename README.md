@@ -155,6 +155,14 @@ name minus the `KEY_` prefix, lower-case — e.g. `ptt_key = "rightalt"`), then
 docked or connected *after* it started (e.g. an external keyboard on a USB-C hub) is
 picked up automatically within ~1 s — no restart needed.
 
+**No clipped first words:** the mic stream is opened lazily on your first
+dictation and kept warm afterward (like the model), instead of being reopened on
+every press. Opening a mic stream has ~50-100ms of real startup latency during
+which audio is silently dropped — fatal for hold-and-talk, since you start
+speaking the instant the key goes down. Staying warm means only the very first
+press after a (re)start of `dictate.service` can clip; every press after that has
+none.
+
 ## Inline voice commands
 
 You can insert line breaks and submit a field **by voice, inline, in a single
