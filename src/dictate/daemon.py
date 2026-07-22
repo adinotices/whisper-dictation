@@ -176,6 +176,7 @@ def main() -> None:
     # "daemon is up"; connections during model load queue in the listen backlog
     # instead of being refused.
     server = create_server(path)
+    recorder = None
     try:
         model = load_model(config.model)
         wav_path = str(path.with_name("dictate-capture.wav"))
@@ -201,3 +202,5 @@ def main() -> None:
         server.close()
         if path.exists():
             path.unlink()
+        if recorder is not None:
+            recorder.close()
