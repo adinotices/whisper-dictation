@@ -6,6 +6,7 @@ from dictate.ptt import (
     dispatch_events,
     event_to_command,
     key_name_to_code,
+    reconcile_devices,
     select_keyboards,
 )
 
@@ -85,3 +86,88 @@ def test_select_keyboards_skips_unopenable_devices():
         raise PermissionError("no access")
 
     assert select_keyboards(ptt, ["/dev/input/event0"], opener=opener) == []
+
+
+PTT = evdev.ecodes.KEY_RIGHTCTRL
+
+
+class ClosableDev:
+    def __init__(self, name, keys):
+        self.name = name
+        self._keys = keys
+        self.closed = False
+
+    def capabilities(self):
+        return {evdev.ecodes.EV_KEY: self._keys}
+
+    def close(self):
+        self.closed = True
+
+
+def test_reconcile_opens_newly_present_keyboard():
+    kbd = ClosableDev("K860", [PTT])
+    current = {}
+    added, removed = reconcile_devices(
+        current, PTT,
+        list_devices=lambda: ["/dev/input/event28"],
+        opener=lambda p: kbd,
+    )
+    assert current == {"/dev/input/event28": kbd}
+    assert added == ["K860"] and removed == []
+
+
+def test_reconcile_closes_removed_device():
+    kbd = ClosableDev("K860", [PTT])
+    current = {"/dev/input/event28": kbd}
+    added, removed = reconcile_devices(
+        current, PTT,
+        list_devices=lambda: [],           # device unplugged
+        opener=lambda p: (_ for _ in ()).throw(AssertionError("should not open")),
+    )
+    assert current == {}
+    assert kbd.closed is True
+    assert added == [] and removed == ["K860"]
+
+
+def test_reconcile_ignores_present_non_keyboard():
+    mouse = ClosableDev("Mouse", [evdev.ecodes.BTN_LEFT])
+    current = {}
+    added, removed = reconcile_devices(
+        current, PTT,
+        list_devices=lambda: ["/dev/input/event29"],
+        opener=lambda p: mouse,
+    )
+    assert current == {}
+    assert mouse.closed is True          # opened to check caps, then released
+    assert added == [] and removed == []
+
+
+def test_reconcile_skips_unopenable_path():
+    current = {}
+    added, removed = reconcile_devices(
+        current, PTT,
+        list_devices=lambda: ["/dev/input/event9"],
+        opener=lambda p: (_ for _ in ()).throw(PermissionError("no access")),
+    )
+    assert current == {}
+    assert added == [] and removed == []
+
+
+def test_reconcile_is_idempotent_when_unchanged():
+    kbd = ClosableDev("K860", [PTT])
+    current = {"/dev/input/event28": kbd}
+    opens = []
+
+    def opener(p):
+        opens.append(p)
+        return kbd
+
+    added, removed = reconcile_devices(
+        current, PTT,
+        list_devices=lambda: ["/dev/input/event28"],
+        opener=opener,
+    )
+    assert current == {"/dev/input/event28": kbd}
+    assert added == [] and removed == []
+    assert opens == []                   # already-tracked path is not re-opened
+    assert kbd.closed is False
