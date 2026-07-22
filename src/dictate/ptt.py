@@ -67,19 +67,84 @@ def select_keyboards(ptt_code, paths, opener=evdev.InputDevice):
     return keyboards
 
 
-def event_stream(devices):
-    """Yield events from several devices at once via select()."""
-    fd_to_device = {device.fd: device for device in devices}
+# How often (seconds) the listen loop wakes to re-scan /dev/input for keyboards
+# that were docked/undocked after startup. A keyboard becomes live within ~this
+# long; small enough to feel instant, large enough to avoid a busy loop.
+POLL_INTERVAL = 1.0
+
+
+def reconcile_devices(current, ptt_code, list_devices=evdev.list_devices,
+                      opener=evdev.InputDevice):
+    """Bring the ``{path: device}`` map `current` in line with the devices now
+    present in /dev/input. Opens newly-appeared keyboards (those exposing the PTT
+    key), closes ones that were unplugged. Returns ``(added_names, removed_names)``
+    so the caller can log changes. Mutates `current` in place.
+    """
+    present = set(list_devices())
+    removed = []
+    for path in list(current):
+        if path not in present:
+            device = current.pop(path)
+            removed.append(device.name)
+            try:
+                device.close()
+            except OSError:
+                pass
+    added = []
+    for path in present:
+        if path in current:
+            continue
+        try:
+            device = opener(path)
+        except (PermissionError, OSError):
+            continue  # permission gap or a hotplug race — try again next scan
+        keys = device.capabilities().get(evdev.ecodes.EV_KEY, [])
+        if ptt_code in keys:
+            current[path] = device
+            added.append(device.name)
+        else:
+            try:
+                device.close()  # not a keyboard; don't hold it open
+            except OSError:
+                pass
+    return added, removed
+
+
+def run_listener(ptt_code, sender, list_devices=evdev.list_devices,
+                 opener=evdev.InputDevice, poll_interval=POLL_INTERVAL,
+                 selector=_select.select):
+    """Watch all PTT-capable keyboards, re-scanning every `poll_interval` seconds
+    so keyboards docked after startup are picked up automatically. Blocks forever.
+    """
+    devices: dict = {}
+    reconcile_devices(devices, ptt_code, list_devices, opener)
     while True:
-        readable, _, _ = _select.select(fd_to_device, [], [])
+        fd_map = {d.fd: (path, d) for path, d in devices.items()}
+        readable, _, _ = selector(list(fd_map), [], [], poll_interval)
         for fd in readable:
-            yield from fd_to_device[fd].read()
+            path, device = fd_map[fd]
+            try:
+                dispatch_events(device.read(), ptt_code, sender)
+            except OSError:
+                # Device yanked between select() and read(): drop it now; the
+                # reconcile below also handles the steady-state case.
+                devices.pop(path, None)
+                try:
+                    device.close()
+                except OSError:
+                    pass
+        added, removed = reconcile_devices(devices, ptt_code, list_devices, opener)
+        for name in added:
+            print(f"dictate-ptt: keyboard connected: {name}", file=sys.stderr)
+        for name in removed:
+            print(f"dictate-ptt: keyboard disconnected: {name}", file=sys.stderr)
 
 
 def main() -> None:
     config = load_config()
     ptt_code = key_name_to_code(config.ptt_key)
-    devices = select_keyboards(ptt_code, evdev.list_devices())
+    devices: dict = {}
+    reconcile_devices(devices, ptt_code)
     if not devices:
         print(
             "dictate-ptt: no keyboard exposing the PTT key found "
@@ -92,6 +157,6 @@ def main() -> None:
         send_command("stop")
     except OSError:
         pass
-    names = ", ".join(d.name for d in devices)
-    print(f"dictate-ptt: listening on {names}", file=sys.stderr)
-    dispatch_events(event_stream(devices), ptt_code, send_command)
+    names = ", ".join(d.name for d in devices.values())
+    print(f"dictate-ptt: listening on {names} (hotplug-aware)", file=sys.stderr)
+    run_listener(ptt_code, send_command)

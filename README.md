@@ -151,8 +151,9 @@ Super+D tap-toggle keeps working alongside it.
 name minus the `KEY_` prefix, lower-case — e.g. `ptt_key = "rightalt"`), then
 `systemctl --user restart dictate-ptt.service`.
 
-**Note:** a keyboard plugged in *after* the listener starts is picked up only on
-`systemctl --user restart dictate-ptt.service`.
+**Hotplug-aware:** the listener re-scans `/dev/input` every second, so a keyboard
+docked or connected *after* it started (e.g. an external keyboard on a USB-C hub) is
+picked up automatically within ~1 s — no restart needed.
 
 ## Inline voice commands
 
